@@ -41,14 +41,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of events to keep when using --event-subset first or last.",
     )
 
-    parser.add_argument("--frame-col", default="frame_index", help="Frame index column for KineLearn prediction tables.")
-    parser.add_argument("--fps", type=float, help="Frames per second if behavior time must be derived from frame index.")
+    parser.add_argument("--frame-col", default="frame_index", help="Frame index column when frame-based alignment or prediction adaptation is used.")
+    parser.add_argument("--fps", type=float, help="Frames per second for prediction adaptation or frame-based alignment.")
     parser.add_argument("--probability-col", default="predicted_probability", help="Prediction score column for KineLearn tables.")
     parser.add_argument("--label-col", help="Fallback label column if probability is unavailable.")
 
     parser.add_argument("--pre", type=float, default=1.0, help="Seconds before each event.")
     parser.add_argument("--post", type=float, default=2.0, help="Seconds after each event.")
     parser.add_argument("--bin-size", type=float, help="Aligned window bin size in seconds.")
+    parser.add_argument(
+        "--alignment-mode",
+        default="nearest",
+        choices=["nearest", "frame"],
+        help="Use nearest-time matching or direct frame-offset slicing for alignment.",
+    )
     parser.add_argument("--behaviors", nargs="*", help="Subset of behaviors to include.")
     parser.add_argument("--group-col", default="group", help="Metadata column used for cohort comparisons.")
     parser.add_argument("--title", help="Optional plot title.")
@@ -95,6 +101,9 @@ def main() -> None:
         bin_size=args.bin_size,
         metadata_df=metadata,
         behaviors=args.behaviors,
+        alignment_mode=args.alignment_mode,
+        fps=args.fps,
+        frame_col=args.frame_col,
     )
     event_summary = summarize_by_event(aligned)
     subject_summary = summarize_by_subject(event_summary)

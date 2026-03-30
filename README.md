@@ -184,6 +184,40 @@ kinelearn-stimviz \
   --output last10_psth.png
 ```
 
+If you want alignment to follow direct frame-offset slicing more closely, use frame mode with tables that include `frame_index`:
+
+```bash
+kinelearn-stimviz \
+  --events stimulus_events.parquet \
+  --behavior behavior_long.parquet \
+  --metadata metadata.parquet \
+  --alignment-mode frame \
+  --fps 60 \
+  --pre 1.0 \
+  --post 3.0 \
+  --behaviors back_leg_together genitalia_extension \
+  --output last10_frame_aligned.png
+```
+
+### Choosing an alignment mode
+
+`kinelearn-stimviz` supports two alignment modes:
+
+- `nearest`: align by matching each target time bin to the nearest observed sample in time
+- `frame`: align by converting the window to frame offsets and slicing exact frame positions
+
+As a rule of thumb:
+
+- use `frame` when your behavior data are genuinely frame-based, include `frame_index`, and you want the analysis to stay as close as possible to direct frame slicing in older workflows
+- use `nearest` when your data are more naturally time-based, may be irregularly sampled, or come from mixed exported tables where absolute time is the more natural alignment unit
+
+In practice:
+
+- `frame` tends to preserve fine frame-level peaks and valleys more faithfully
+- `nearest` is the more general and portable default for heterogeneous tabular inputs
+
+For historical reproducibility, especially when comparing against older frame-sliced PSTH plots, `frame` is often the better fit. For newer table-based workflows built around exported timestamps, `nearest` is usually the safer default.
+
 You can also point the CLI directly at a KineLearn-style frame prediction table:
 
 ```bash

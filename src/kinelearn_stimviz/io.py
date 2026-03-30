@@ -89,22 +89,31 @@ def _normalize_wide_behavior_table(
     *,
     entity_col: str,
     time_col: str,
+    frame_col: str | None = None,
     behavior_cols: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     reserved = {entity_col, time_col}
+    if frame_col and frame_col in df.columns:
+        reserved.add(frame_col)
     if behavior_cols is None:
         behavior_cols = [col for col in df.columns if col not in reserved]
     behavior_cols = list(behavior_cols)
     if not behavior_cols:
         raise ValueError("No behavior columns were provided or inferred for wide-format input.")
 
+    id_vars = [entity_col, time_col]
+    if frame_col and frame_col in df.columns:
+        id_vars.append(frame_col)
     long_df = df.melt(
-        id_vars=[entity_col, time_col],
+        id_vars=id_vars,
         value_vars=behavior_cols,
         var_name="behavior",
         value_name="value",
     )
-    return long_df.rename(columns={entity_col: "entity_id", time_col: "time"})
+    rename_map = {entity_col: "entity_id", time_col: "time"}
+    if frame_col and frame_col in df.columns:
+        rename_map[frame_col] = "frame_index"
+    return long_df.rename(columns=rename_map)
 
 
 def _normalize_long_behavior_table(
@@ -114,19 +123,25 @@ def _normalize_long_behavior_table(
     time_col: str,
     behavior_col: str,
     value_col: str,
+    frame_col: str | None = None,
 ) -> pd.DataFrame:
     required = [entity_col, time_col, behavior_col, value_col]
     missing = [col for col in required if col not in df.columns]
     if missing:
         raise ValueError(f"Behavior table is missing columns: {missing}")
-    return df.rename(
+    normalized = df.rename(
         columns={
             entity_col: "entity_id",
             time_col: "time",
             behavior_col: "behavior",
             value_col: "value",
         }
-    )[["entity_id", "time", "behavior", "value"]]
+    )
+    keep_cols = ["entity_id", "time", "behavior", "value"]
+    if frame_col and frame_col in normalized.columns:
+        normalized = normalized.rename(columns={frame_col: "frame_index"})
+        keep_cols.insert(2, "frame_index")
+    return normalized[keep_cols]
 
 
 def adapt_kinelearn_predictions(
@@ -168,6 +183,7 @@ def adapt_kinelearn_predictions(
     return pd.DataFrame(
         {
             "entity_id": df[entity_col].astype(str),
+            "frame_index": pd.to_numeric(df[frame_col], errors="raise") if frame_col and frame_col in df.columns else np.nan,
             "time": time_values,
             "behavior": df[behavior_col].astype(str),
             "value": values,
@@ -199,12 +215,14 @@ def load_behavior_table(
             time_col=time_col,
             behavior_col=behavior_col,
             value_col=value_col,
+            frame_col=frame_col,
         )
     elif input_format == "wide":
         normalized = _normalize_wide_behavior_table(
             df,
             entity_col=entity_col,
             time_col=time_col,
+            frame_col=frame_col,
             behavior_cols=behavior_cols,
         )
     elif input_format == "kinelearn_predictions":
@@ -225,4 +243,7 @@ def load_behavior_table(
     normalized["behavior"] = normalized["behavior"].astype(str)
     normalized["time"] = pd.to_numeric(normalized["time"], errors="raise")
     normalized["value"] = pd.to_numeric(normalized["value"], errors="raise")
+    if "frame_index" in normalized.columns:
+        normalized["frame_index"] = pd.to_numeric(normalized["frame_index"], errors="coerce")
+        return normalized.sort_values(["entity_id", "behavior", "frame_index", "time"]).reset_index(drop=True)
     return normalized.sort_values(["entity_id", "behavior", "time"]).reset_index(drop=True)

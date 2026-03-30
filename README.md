@@ -1,35 +1,54 @@
 # kinelearn-stimviz
 
-`kinelearn-stimviz` is a small standalone Python package for stimulus-aligned behavioral analysis and PSTH-style plotting from exported tables. It is designed to interoperate with KineLearn outputs, but it does not import KineLearn code or rely on KineLearn internals.
+`kinelearn-stimviz` is a small downstream analysis package for stimulus-aligned behavior visualization. Its main job is to take exported behavior predictions plus stimulus-event tables and turn them into peri-stimulus summaries such as PSTH-style plots.
 
-The package focuses on a simple pipeline:
+This package is intentionally narrower and more assay-specific than [KineLearn](https://www.github.com/rcalfredson/kinelearn) itself. KineLearn handles the core pose-to-behavior modeling workflow: feature extraction, splitting, training, evaluation, inference, and lightweight native visualizations such as timeline plots. `kinelearn-stimviz` sits one step downstream and focuses on event-aligned analyses that depend on external experimental timing, cohort structure, and assay-specific interpretation.
 
-1. Load a stimulus event table.
-2. Load a behavior time-series table.
-3. Align behavior traces to stimulus times.
-4. Aggregate aligned windows per event, per subject, and per group.
-5. Plot PSTH-like summaries with confidence intervals.
+In practice, the workflow looks like this:
 
-## Why this repo exists
+1. Use KineLearn to generate frame-level predictions or probabilities.
+2. Prepare a stimulus-event table on the same time base as those predictions.
+3. Load the exported tables into `kinelearn-stimviz`.
+4. Align behavior traces to stimulus times.
+5. Aggregate per event, per subject, and per group.
+6. Plot PSTH-like summaries with confidence intervals.
 
-This package grew out of an earlier set of one-off analysis scripts that already contained a useful conceptual pipeline:
+## Relationship To KineLearn
 
-- Parse stimulus timing and behavior traces.
-- Build per-event aligned windows.
-- Average across pulses, then subjects.
-- Plot means with uncertainty.
+`kinelearn-stimviz` is designed to interoperate with [KineLearn](https://www.github.com/rcalfredson/kinelearn) outputs, but it does not import KineLearn internals. The boundary is file-based:
 
-That core idea is preserved here. What changed is the packaging and the data contract:
+- KineLearn writes exported tables and manifests.
+- `kinelearn-stimviz` reads those exported tables together with stimulus-event annotations.
 
-- No hard-coded filename pattern assumptions.
-- No hard-coded behavior names.
-- No special treatment of only the first or last pulses.
-- No dependence on lab-specific LED log layouts.
-- No coupling to KineLearn source code.
+That separation keeps the plotting layer lightweight and reusable while avoiding tight coupling to model-training code.
 
-## Minimal input contract
+Typical KineLearn inputs to this package include:
 
-The package normalizes inputs into a small set of standard columns.
+- `frame_predictions.parquet`
+- `per_behavior_metrics.csv`
+- `train_manifest.yml`
+
+The most direct integration point is frame-level prediction output. For example, if a KineLearn prediction table contains:
+
+- `video_id` or `stem`
+- `frame_index` or a timestamp column
+- `behavior`
+- `predicted_probability`
+- optional `predicted_label`
+- optional `true_label`
+
+then `kinelearn-stimviz` can adapt that into its normalized behavior schema with:
+
+- `entity_id <- video_id`
+- `time <- frame_index / fps` or an existing timestamp column
+- `behavior <- behavior`
+- `value <- predicted_probability` or `predicted_label`
+
+KineLearn itself already covers quick qualitative inspection through timeline plotting. `kinelearn-stimviz` is meant for the next step: specialized, event-aligned summaries.
+
+## Core Data Contract
+
+The package works from a small normalized schema.
 
 ### 1. Stimulus event table
 
@@ -42,7 +61,7 @@ Optional columns:
 
 - `event_id`: unique event identifier; generated automatically if omitted
 - `event_type`: event label such as `laser`, `tone`, or `stimulus`
-- any extra metadata columns
+- any additional metadata columns
 
 Example:
 
@@ -77,7 +96,7 @@ KineLearn-style frame predictions:
 - either a timestamp column or `frame_index` plus `fps`
 - either `predicted_probability` or a binary `predicted_label`
 
-Normalized internal schema:
+Internally, behavior data are normalized to:
 
 - `entity_id`
 - `time`
@@ -97,66 +116,33 @@ Typical optional columns:
 - `genotype`
 - `session`
 
-This table is merged after alignment so group summaries can be computed cleanly.
+This table is merged after alignment so cohort-level summaries can be plotted cleanly.
 
-## KineLearn interoperability
+## What The Package Does
 
-This repo is intended to consume exported KineLearn artifacts, not KineLearn internals.
+The current package is intentionally modest in scope:
 
-Relevant KineLearn outputs may include:
+- stimulus-aligned windows around one event table at a time
+- one or more behaviors per run
+- binary or proportion-like traces
+- per-event, per-subject, and per-group aggregation
+- configurable all / first N / last N event selection
+- PSTH-style plots with 95% confidence intervals
 
-- `train_manifest.yml`
-- `per_behavior_metrics.csv`
-- `frame_predictions.parquet`
-
-The most direct integration point is `frame_predictions.parquet`. If it contains columns like:
-
-- `video_id` or `stem`
-- `frame_index` or a timestamp
-- `behavior`
-- `predicted_probability`
-- optional `predicted_label`
-- optional `true_label`
-
-then `kinelearn-stimviz` can adapt that table into the normalized behavior schema with:
-
-- `entity_id <- video_id`
-- `time <- frame_index / fps` or an existing timestamp column
-- `behavior <- behavior`
-- `value <- predicted_probability` or `predicted_label`
-
-External stimulus-event tables can then be joined by `entity_id` and aligned by time.
-
-## Repository structure
+The implementation is organized under:
 
 ```text
 src/kinelearn_stimviz/
-  __init__.py
   io.py
   align.py
   aggregate.py
   stats.py
   plotting.py
   cli.py
-examples/
-  data/
-    behavior_long.csv
-    stimulus_events.csv
-    metadata.csv
+  legacy_convert.py
 ```
 
-## MVP scope
-
-The current MVP intentionally stays small:
-
-- binary or proportion-like traces
-- one event table at a time
-- one or more behaviors
-- optional cohort comparison through a metadata table
-- configurable all / first N / last N event selection
-- PSTH-like mean traces with 95% confidence intervals
-
-## Example workflow
+## Typical Workflow
 
 Install locally:
 
@@ -164,23 +150,7 @@ Install locally:
 pip install -e .
 ```
 
-Convert an old JSON pair manifest into normalized tables:
-
-```bash
-kinelearn-stimviz-convert-legacy \
-  old/retinal_fed_29Aug.json \
-  --output-dir converted/retinal_fed_29Aug \
-  --fps 60 \
-  --event-type laser
-```
-
-This writes:
-
-- `converted/retinal_fed_29Aug/behavior_long.csv`
-- `converted/retinal_fed_29Aug/stimulus_events.csv`
-- `converted/retinal_fed_29Aug/metadata.csv`
-
-The converter is intentionally legacy-specific. It uses the older prediction CSV plus LED log pairing and the legacy `chunk_data_log_<timestamp>.csv` lookup only for migration into the new table-based workflow.
+### Plotting from normalized tables
 
 Run the example:
 
@@ -214,7 +184,7 @@ kinelearn-stimviz \
   --output last10_psth.png
 ```
 
-You can also point the CLI at a KineLearn-style frame prediction table:
+You can also point the CLI directly at a KineLearn-style frame prediction table:
 
 ```bash
 kinelearn-stimviz \
@@ -229,28 +199,39 @@ kinelearn-stimviz \
   --output psth.png
 ```
 
-## Design lineage
+## Why The Legacy Converter Exists
 
-- The overall parse -> align -> aggregate -> plot pipeline.
-- The idea of building aligned windows around stimulus onsets.
-- The fly or subject level averaging step before cohort summaries.
-- PSTH-style plotting with uncertainty bands.
+The main package is designed around exported tables, not old project-specific manifests. The legacy converter exists only as a migration bridge for older datasets that were organized as JSON lists of `[prediction_csv, led_csv]` pairs.
 
-## What was generalized or dropped
+Use it when you want to bring older datasets into the new table-based workflow:
 
-Generalized:
+```bash
+kinelearn-stimviz-convert-legacy \
+  old/retinal_fed_29Aug.json \
+  --output-dir converted/retinal_fed_29Aug \
+  --fps 60 \
+  --event-type laser \
+  --output-format parquet
+```
 
-- Stimulus events are now generic tabular inputs.
-- Behaviors are arbitrary columns or long-format labels.
-- KineLearn frame predictions can be adapted from exported tables.
-- Grouping is handled through metadata tables instead of script-specific branches.
-- first-N and last-N event selection are supported as configurable options rather than fixed workflow branches
+This writes normalized tables such as:
 
-Dropped or replaced:
+- `behavior_long.parquet`
+- `stimulus_events.parquet`
+- `metadata.parquet`
 
-- `chunk_data_log_<timestamp>.csv` filename assumptions.
-- timestamp parsing from filenames.
-- fixed behavior lists such as `back_leg_together` and `genitalia_extension`.
-- rigid `first 10` and `last 10` pulse handling baked into the analysis flow.
-- lab-specific LED CSV parsing logic.
-- mixing plotting with hypothesis tests in a single plotting step.
+You can also use `--output-format csv` or `--output-format both`. Parquet output requires a parquet engine such as `pyarrow`.
+
+The converter is intentionally isolated from the main plotting path. It uses the older prediction CSV plus LED log pairing and the legacy `chunk_data_log_<timestamp>.csv` lookup only to migrate older experiments into the same schema that newer KineLearn-derived workflows can use directly.
+
+## Design Notes
+
+This package preserves the useful analysis structure from older one-off plotting scripts while generalizing away lab-specific assumptions:
+
+- no hard-coded behavior names
+- no hard-coded filename patterns in the main analysis path
+- no fixed first-10 / last-10 workflow branches
+- no dependence on KineLearn source imports
+- no mixing of plotting with embedded statistical testing logic
+
+The result is a small, reusable layer for stimulus-aligned analysis that can sit downstream of KineLearn or any other tool that can export compatible tables.

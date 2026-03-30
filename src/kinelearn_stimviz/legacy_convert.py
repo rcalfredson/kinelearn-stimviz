@@ -11,6 +11,7 @@ import pandas as pd
 
 
 DEFAULT_TS_RE = re.compile(r"(\d{8}_\d{6})")
+SUPPORTED_OUTPUT_FORMATS = {"csv", "parquet", "both"}
 
 
 @dataclass
@@ -181,10 +182,13 @@ def convert_legacy_manifest(
     timestamp_regex: str = r"(\d{8}_\d{6})",
     entity_id_mode: str = "prediction_stem",
     event_type: str = "stimulus",
-) -> dict[str, Path]:
+    output_format: str = "csv",
+) -> dict[str, list[Path]]:
     """Convert an old JSON manifest into normalized tables for the new CLI."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    if output_format not in SUPPORTED_OUTPUT_FORMATS:
+        raise ValueError(f"Unsupported output format: {output_format}")
 
     timestamp_re = re.compile(timestamp_regex)
     pairs = load_legacy_manifest(manifest_path)
@@ -220,19 +224,40 @@ def convert_legacy_manifest(
         event_tables.append(event_df[["entity_id", "event_id", "event_time", "event_type", "event_datetime"]])
         metadata_rows.append(metadata)
 
-    behavior_out = output_dir / "behavior_long.csv"
-    events_out = output_dir / "stimulus_events.csv"
-    metadata_out = output_dir / "metadata.csv"
+    behavior_table = pd.concat(behavior_tables, ignore_index=True)
+    events_table = pd.concat(event_tables, ignore_index=True)
+    metadata_table = pd.DataFrame([row.__dict__ for row in metadata_rows])
 
-    pd.concat(behavior_tables, ignore_index=True).to_csv(behavior_out, index=False)
-    pd.concat(event_tables, ignore_index=True).to_csv(events_out, index=False)
-    pd.DataFrame([row.__dict__ for row in metadata_rows]).to_csv(metadata_out, index=False)
-
-    return {
-        "behavior": behavior_out,
-        "events": events_out,
-        "metadata": metadata_out,
+    outputs = {
+        "behavior": write_output_table(behavior_table, output_dir / "behavior_long", output_format),
+        "events": write_output_table(events_table, output_dir / "stimulus_events", output_format),
+        "metadata": write_output_table(metadata_table, output_dir / "metadata", output_format),
     }
+    return outputs
+
+
+def write_output_table(
+    table: pd.DataFrame,
+    output_stem: Path,
+    output_format: str,
+) -> list[Path]:
+    """Write a normalized table as CSV, Parquet, or both."""
+    written_paths: list[Path] = []
+    if output_format in {"csv", "both"}:
+        csv_path = output_stem.with_suffix(".csv")
+        table.to_csv(csv_path, index=False)
+        written_paths.append(csv_path)
+    if output_format in {"parquet", "both"}:
+        parquet_path = output_stem.with_suffix(".parquet")
+        try:
+            table.to_parquet(parquet_path, index=False)
+        except ImportError as exc:
+            raise ImportError(
+                "Parquet output requires an installed parquet engine such as "
+                "'pyarrow' or 'fastparquet'."
+            ) from exc
+        written_paths.append(parquet_path)
+    return written_paths
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -261,6 +286,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="How to derive entity ids for the normalized output tables.",
     )
     parser.add_argument("--event-type", default="stimulus", help="Event type label to assign in the output event table.")
+    parser.add_argument(
+        "--output-format",
+        default="csv",
+        choices=["csv", "parquet", "both"],
+        help="Whether to write normalized tables as CSV, Parquet, or both.",
+    )
     return parser
 
 
@@ -277,10 +308,14 @@ def main() -> None:
         timestamp_regex=args.timestamp_regex,
         entity_id_mode=args.entity_id_mode,
         event_type=args.event_type,
+        output_format=args.output_format,
     )
-    print(f"Wrote behavior table: {outputs['behavior']}")
-    print(f"Wrote stimulus event table: {outputs['events']}")
-    print(f"Wrote metadata table: {outputs['metadata']}")
+    for path in outputs["behavior"]:
+        print(f"Wrote behavior table: {path}")
+    for path in outputs["events"]:
+        print(f"Wrote stimulus event table: {path}")
+    for path in outputs["metadata"]:
+        print(f"Wrote metadata table: {path}")
 
 
 if __name__ == "__main__":

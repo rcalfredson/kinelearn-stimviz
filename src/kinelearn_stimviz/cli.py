@@ -45,6 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=float, help="Frames per second for prediction adaptation or frame-based alignment.")
     parser.add_argument("--probability-col", default="predicted_probability", help="Prediction score column for KineLearn tables.")
     parser.add_argument("--label-col", help="Fallback label column if probability is unavailable.")
+    parser.add_argument("--probability-prefix", default="prob_", help="Prefix for wide KineLearn probability columns such as prob_<behavior>.")
+    parser.add_argument("--label-prefix", default="pred_", help="Prefix for wide KineLearn label columns such as pred_<behavior>.")
 
     parser.add_argument("--pre", type=float, default=1.0, help="Seconds before each event.")
     parser.add_argument("--post", type=float, default=2.0, help="Seconds after each event.")
@@ -85,6 +87,8 @@ def main() -> None:
         fps=args.fps,
         probability_col=args.probability_col,
         label_col=args.label_col,
+        probability_prefix=args.probability_prefix,
+        label_prefix=args.label_prefix,
     )
     metadata = load_metadata(args.metadata, entity_col=args.entity_col)
     events = select_events(

@@ -147,48 +147,96 @@ def _normalize_long_behavior_table(
 def adapt_kinelearn_predictions(
     df: pd.DataFrame,
     *,
-    entity_col: str = "video_id",
+    entity_col: str = "__stem__",
     time_col: str | None = None,
-    frame_col: str | None = "frame_index",
+    frame_col: str | None = "__frame__",
     fps: float | None = None,
     behavior_col: str = "behavior",
     probability_col: str | None = "predicted_probability",
     label_col: str | None = None,
+    probability_prefix: str = "prob_",
+    label_prefix: str = "pred_",
 ) -> pd.DataFrame:
     """
     Adapt KineLearn-style frame-level predictions into the package's long schema.
 
-    The input should contain one row per frame and behavior with an entity identifier,
-    a behavior name, and either a timestamp column or a frame index plus fps.
+    Supports either:
+    - long format with one row per frame and behavior
+    - wide KineLearn output with one row per frame and columns like `prob_<behavior>`
     """
     if entity_col not in df.columns:
         raise ValueError(f"KineLearn prediction table is missing entity column: {entity_col}")
-    if behavior_col not in df.columns:
-        raise ValueError(f"KineLearn prediction table is missing behavior column: {behavior_col}")
 
+    frame_values = (
+        pd.to_numeric(df[frame_col], errors="raise")
+        if frame_col and frame_col in df.columns
+        else pd.Series(np.nan, index=df.index, dtype=float)
+    )
     if time_col and time_col in df.columns:
         time_values = pd.to_numeric(df[time_col], errors="raise")
     elif frame_col and frame_col in df.columns and fps:
-        time_values = pd.to_numeric(df[frame_col], errors="raise") / fps
+        time_values = frame_values / fps
     else:
         raise ValueError("Provide either a timestamp column or a frame index column together with fps.")
 
-    if probability_col and probability_col in df.columns:
-        values = pd.to_numeric(df[probability_col], errors="raise")
-    elif label_col and label_col in df.columns:
-        values = pd.to_numeric(df[label_col], errors="raise")
-    else:
-        raise ValueError("Provide either a probability column or a label column present in the table.")
+    if behavior_col in df.columns:
+        if probability_col and probability_col in df.columns:
+            values = pd.to_numeric(df[probability_col], errors="raise")
+        elif label_col and label_col in df.columns:
+            values = pd.to_numeric(df[label_col], errors="raise")
+        else:
+            raise ValueError("Provide either a probability column or a label column present in the table.")
 
-    return pd.DataFrame(
-        {
-            "entity_id": df[entity_col].astype(str),
-            "frame_index": pd.to_numeric(df[frame_col], errors="raise") if frame_col and frame_col in df.columns else np.nan,
-            "time": time_values,
-            "behavior": df[behavior_col].astype(str),
-            "value": values,
-        }
+        return pd.DataFrame(
+            {
+                "entity_id": df[entity_col].astype(str),
+                "frame_index": frame_values,
+                "time": time_values,
+                "behavior": df[behavior_col].astype(str),
+                "value": values,
+            }
+        )
+
+    value_cols = [col for col in df.columns if col.startswith(probability_prefix)]
+    value_prefix = probability_prefix
+    if not value_cols:
+        value_cols = [col for col in df.columns if col.startswith(label_prefix)]
+        value_prefix = label_prefix
+    if not value_cols:
+        raise ValueError(
+            "KineLearn prediction table must either include a behavior column or "
+            f"wide columns starting with {probability_prefix!r} or {label_prefix!r}."
+        )
+
+    id_vars = [entity_col]
+    if frame_col and frame_col in df.columns:
+        id_vars.append(frame_col)
+    if time_col and time_col in df.columns:
+        id_vars.append(time_col)
+
+    long_df = df.melt(
+        id_vars=id_vars,
+        value_vars=value_cols,
+        var_name="behavior",
+        value_name="value",
     )
+    long_df["behavior"] = long_df["behavior"].str.replace(
+        f"^{value_prefix}",
+        "",
+        regex=True,
+    )
+    long_df = long_df.rename(columns={entity_col: "entity_id"})
+    if frame_col and frame_col in long_df.columns:
+        long_df = long_df.rename(columns={frame_col: "frame_index"})
+    else:
+        long_df["frame_index"] = np.nan
+    if time_col and time_col in long_df.columns:
+        long_df = long_df.rename(columns={time_col: "time"})
+    else:
+        long_df["time"] = pd.to_numeric(long_df["frame_index"], errors="raise") / fps
+
+    keep_cols = ["entity_id", "frame_index", "time", "behavior", "value"]
+    return long_df[keep_cols]
 
 
 def load_behavior_table(
@@ -204,6 +252,8 @@ def load_behavior_table(
     fps: float | None = None,
     probability_col: str | None = "predicted_probability",
     label_col: str | None = None,
+    probability_prefix: str = "prob_",
+    label_prefix: str = "pred_",
 ) -> pd.DataFrame:
     """Load a behavior time-series table and normalize it to long format."""
     df = read_table(path).copy()
@@ -235,6 +285,8 @@ def load_behavior_table(
             behavior_col=behavior_col,
             probability_col=probability_col,
             label_col=label_col,
+            probability_prefix=probability_prefix,
+            label_prefix=label_prefix,
         )
     else:
         raise ValueError(f"Unsupported behavior input format: {input_format}")

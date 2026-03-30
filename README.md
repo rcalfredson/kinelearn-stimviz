@@ -30,19 +30,18 @@ Typical KineLearn inputs to this package include:
 
 The most direct integration point is frame-level prediction output. For example, if a KineLearn prediction table contains:
 
-- `video_id` or `stem`
-- `frame_index` or a timestamp column
-- `behavior`
-- `predicted_probability`
-- optional `predicted_label`
-- optional `true_label`
+- `__stem__`
+- `__frame__`
+- one or more `prob_<behavior>` columns
+- optional `pred_<behavior>` columns
 
 then `kinelearn-stimviz` can adapt that into its normalized behavior schema with:
 
-- `entity_id <- video_id`
-- `time <- frame_index / fps` or an existing timestamp column
-- `behavior <- behavior`
-- `value <- predicted_probability` or `predicted_label`
+- `entity_id <- __stem__`
+- `frame_index <- __frame__`
+- `time <- __frame__ / fps`
+- `behavior <- <behavior name extracted from prob_<behavior>>`
+- `value <- prob_<behavior>`
 
 KineLearn itself already covers quick qualitative inspection through timeline plotting. `kinelearn-stimviz` is meant for the next step: specialized, event-aligned summaries.
 
@@ -91,10 +90,8 @@ Wide format:
 
 KineLearn-style frame predictions:
 
-- entity id column such as `video_id` or `stem`
-- `behavior`
-- either a timestamp column or `frame_index` plus `fps`
-- either `predicted_probability` or a binary `predicted_label`
+- either wide KineLearn output with `__stem__`, `__frame__`, and `prob_<behavior>` columns
+- or long per-frame/per-behavior tables with an entity id, a behavior column, and a probability column
 
 Internally, behavior data are normalized to:
 
@@ -225,11 +222,11 @@ kinelearn-stimviz \
   --events stimulus_events.csv \
   --behavior frame_predictions.parquet \
   --behavior-format kinelearn_predictions \
-  --entity-col video_id \
-  --behavior-col behavior \
-  --frame-col frame_index \
-  --fps 30 \
-  --probability-col predicted_probability \
+  --entity-col __stem__ \
+  --frame-col __frame__ \
+  --fps 60 \
+  --alignment-mode frame \
+  --behaviors genitalia_extension \
   --output psth.png
 ```
 

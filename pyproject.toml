@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kinelearn-stimviz"
+version = "0.1.0"
+description = "Stimulus-aligned behavioral analysis and PSTH-style plotting from exported tables."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "OpenAI Codex" }
+]
+dependencies = [
+  "matplotlib>=3.8",
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "pyarrow>=14.0",
+  "pyyaml>=6.0",
+  "seaborn>=0.13",
+]
+
+[project.scripts]
+kinelearn-stimviz = "kinelearn_stimviz.cli:main"
+kinelearn-stimviz-convert-legacy = "kinelearn_stimviz.legacy_convert:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

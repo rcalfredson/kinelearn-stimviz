@@ -1,0 +1,9 @@
+entity_id,event_id,event_time,event_type
+fly_a,0,1.5,laser
+fly_a,1,3.5,laser
+fly_b,2,1.4,laser
+fly_b,3,3.4,laser
+fly_c,4,1.6,laser
+fly_c,5,3.6,laser
+fly_d,6,1.5,laser
+fly_d,7,3.5,laser

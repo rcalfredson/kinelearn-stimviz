@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Iterable
+
+import numpy as np
+import pandas as pd
+import yaml
+
+
+DEFAULT_EVENT_COLUMNS = {
+    "entity": "entity_id",
+    "time": "event_time",
+    "type": "event_type",
+}
+
+DEFAULT_BEHAVIOR_COLUMNS = {
+    "entity": "entity_id",
+    "time": "time",
+    "behavior": "behavior",
+    "value": "value",
+}
+
+
+def read_table(path: str | Path) -> pd.DataFrame:
+    """Load a CSV or Parquet table based on file extension."""
+    path = Path(path)
+    if path.suffix.lower() == ".csv":
+        return pd.read_csv(path)
+    if path.suffix.lower() in {".parquet", ".pq"}:
+        return pd.read_parquet(path)
+    raise ValueError(f"Unsupported table format: {path}")
+
+
+def read_yaml(path: str | Path) -> dict:
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def load_stimulus_events(
+    path: str | Path,
+    *,
+    entity_col: str = "entity_id",
+    time_col: str = "event_time",
+    event_type_col: str = "event_type",
+    event_id_col: str = "event_id",
+) -> pd.DataFrame:
+    """Load and validate a stimulus-event table."""
+    events = read_table(path).copy()
+    required = [entity_col, time_col]
+    missing = [col for col in required if col not in events.columns]
+    if missing:
+        raise ValueError(f"Stimulus event table is missing columns: {missing}")
+
+    if event_type_col not in events.columns:
+        events[event_type_col] = "stimulus"
+    if event_id_col not in events.columns:
+        events[event_id_col] = np.arange(len(events), dtype=int)
+
+    events = events.rename(
+        columns={
+            entity_col: "entity_id",
+            time_col: "event_time",
+            event_type_col: "event_type",
+            event_id_col: "event_id",
+        }
+    )
+    events["event_time"] = pd.to_numeric(events["event_time"], errors="raise")
+    return events.sort_values(["entity_id", "event_time", "event_id"]).reset_index(drop=True)
+
+
+def load_metadata(
+    path: str | Path | None,
+    *,
+    entity_col: str = "entity_id",
+) -> pd.DataFrame | None:
+    if path is None:
+        return None
+
+    metadata = read_table(path).copy()
+    if entity_col not in metadata.columns:
+        raise ValueError(f"Metadata table is missing the entity column: {entity_col}")
+    return metadata.rename(columns={entity_col: "entity_id"})
+
+
+def _normalize_wide_behavior_table(
+    df: pd.DataFrame,
+    *,
+    entity_col: str,
+    time_col: str,
+    behavior_cols: Iterable[str] | None = None,
+) -> pd.DataFrame:
+    reserved = {entity_col, time_col}
+    if behavior_cols is None:
+        behavior_cols = [col for col in df.columns if col not in reserved]
+    behavior_cols = list(behavior_cols)
+    if not behavior_cols:
+        raise ValueError("No behavior columns were provided or inferred for wide-format input.")
+
+    long_df = df.melt(
+        id_vars=[entity_col, time_col],
+        value_vars=behavior_cols,
+        var_name="behavior",
+        value_name="value",
+    )
+    return long_df.rename(columns={entity_col: "entity_id", time_col: "time"})
+
+
+def _normalize_long_behavior_table(
+    df: pd.DataFrame,
+    *,
+    entity_col: str,
+    time_col: str,
+    behavior_col: str,
+    value_col: str,
+) -> pd.DataFrame:
+    required = [entity_col, time_col, behavior_col, value_col]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"Behavior table is missing columns: {missing}")
+    return df.rename(
+        columns={
+            entity_col: "entity_id",
+            time_col: "time",
+            behavior_col: "behavior",
+            value_col: "value",
+        }
+    )[["entity_id", "time", "behavior", "value"]]
+
+
+def adapt_kinelearn_predictions(
+    df: pd.DataFrame,
+    *,
+    entity_col: str = "video_id",
+    time_col: str | None = None,
+    frame_col: str | None = "frame_index",
+    fps: float | None = None,
+    behavior_col: str = "behavior",
+    probability_col: str | None = "predicted_probability",
+    label_col: str | None = None,
+) -> pd.DataFrame:
+    """
+    Adapt KineLearn-style frame-level predictions into the package's long schema.
+
+    The input should contain one row per frame and behavior with an entity identifier,
+    a behavior name, and either a timestamp column or a frame index plus fps.
+    """
+    if entity_col not in df.columns:
+        raise ValueError(f"KineLearn prediction table is missing entity column: {entity_col}")
+    if behavior_col not in df.columns:
+        raise ValueError(f"KineLearn prediction table is missing behavior column: {behavior_col}")
+
+    if time_col and time_col in df.columns:
+        time_values = pd.to_numeric(df[time_col], errors="raise")
+    elif frame_col and frame_col in df.columns and fps:
+        time_values = pd.to_numeric(df[frame_col], errors="raise") / fps
+    else:
+        raise ValueError("Provide either a timestamp column or a frame index column together with fps.")
+
+    if probability_col and probability_col in df.columns:
+        values = pd.to_numeric(df[probability_col], errors="raise")
+    elif label_col and label_col in df.columns:
+        values = pd.to_numeric(df[label_col], errors="raise")
+    else:
+        raise ValueError("Provide either a probability column or a label column present in the table.")
+
+    return pd.DataFrame(
+        {
+            "entity_id": df[entity_col].astype(str),
+            "time": time_values,
+            "behavior": df[behavior_col].astype(str),
+            "value": values,
+        }
+    )
+
+
+def load_behavior_table(
+    path: str | Path,
+    *,
+    input_format: str = "long",
+    entity_col: str = "entity_id",
+    time_col: str = "time",
+    behavior_col: str = "behavior",
+    value_col: str = "value",
+    behavior_cols: Iterable[str] | None = None,
+    frame_col: str | None = "frame_index",
+    fps: float | None = None,
+    probability_col: str | None = "predicted_probability",
+    label_col: str | None = None,
+) -> pd.DataFrame:
+    """Load a behavior time-series table and normalize it to long format."""
+    df = read_table(path).copy()
+
+    if input_format == "long":
+        normalized = _normalize_long_behavior_table(
+            df,
+            entity_col=entity_col,
+            time_col=time_col,
+            behavior_col=behavior_col,
+            value_col=value_col,
+        )
+    elif input_format == "wide":
+        normalized = _normalize_wide_behavior_table(
+            df,
+            entity_col=entity_col,
+            time_col=time_col,
+            behavior_cols=behavior_cols,
+        )
+    elif input_format == "kinelearn_predictions":
+        normalized = adapt_kinelearn_predictions(
+            df,
+            entity_col=entity_col,
+            time_col=time_col if time_col in df.columns else None,
+            frame_col=frame_col,
+            fps=fps,
+            behavior_col=behavior_col,
+            probability_col=probability_col,
+            label_col=label_col,
+        )
+    else:
+        raise ValueError(f"Unsupported behavior input format: {input_format}")
+
+    normalized["entity_id"] = normalized["entity_id"].astype(str)
+    normalized["behavior"] = normalized["behavior"].astype(str)
+    normalized["time"] = pd.to_numeric(normalized["time"], errors="raise")
+    normalized["value"] = pd.to_numeric(normalized["value"], errors="raise")
+    return normalized.sort_values(["entity_id", "behavior", "time"]).reset_index(drop=True)

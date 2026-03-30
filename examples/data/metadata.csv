@@ -1,0 +1,5 @@
+entity_id,group,cohort
+fly_a,control,synthetic
+fly_b,control,synthetic
+fly_c,stim,synthetic
+fly_d,stim,synthetic

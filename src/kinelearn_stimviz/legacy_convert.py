@@ -108,6 +108,7 @@ def convert_prediction_table(
     entity_id: str,
     frame_rate: float,
     behavior_prefix: str = "Pred_",
+    frame_col: str | None = "frame",
 ) -> tuple[pd.DataFrame, list[str], int]:
     """Convert a wide prediction CSV into the package's long behavior table."""
     prediction_df = pd.read_csv(prediction_path).fillna(0)
@@ -116,7 +117,10 @@ def convert_prediction_table(
         raise ValueError(f"No behavior columns starting with {behavior_prefix!r} found in {prediction_path}")
 
     prediction_df = prediction_df.reset_index(drop=True)
-    prediction_df["frame_index"] = prediction_df.index.astype(int)
+    if frame_col and frame_col in prediction_df.columns:
+        prediction_df["frame_index"] = pd.to_numeric(prediction_df[frame_col], errors="raise").astype(int)
+    else:
+        prediction_df["frame_index"] = prediction_df.index.astype(int)
     prediction_df["time"] = prediction_df["frame_index"] / frame_rate
     long_df = prediction_df.melt(
         id_vars=["frame_index", "time"],
@@ -178,10 +182,12 @@ def convert_legacy_manifest(
     output_dir: str | Path,
     frame_rate: float = 60.0,
     behavior_prefix: str = "Pred_",
+    frame_col: str | None = "frame",
     chunk_pattern: str = "chunk_data_log_{ts}.csv",
     timestamp_regex: str = r"(\d{8}_\d{6})",
     entity_id_mode: str = "prediction_stem",
     event_type: str = "stimulus",
+    group: str | None = None,
     output_format: str = "csv",
 ) -> dict[str, list[Path]]:
     """Convert an old JSON manifest into normalized tables for the new CLI."""
@@ -205,6 +211,7 @@ def convert_legacy_manifest(
             entity_id=entity_id,
             frame_rate=frame_rate,
             behavior_prefix=behavior_prefix,
+            frame_col=frame_col,
         )
         event_df, metadata = convert_event_table(
             led_path,
@@ -227,6 +234,8 @@ def convert_legacy_manifest(
     behavior_table = pd.concat(behavior_tables, ignore_index=True)
     events_table = pd.concat(event_tables, ignore_index=True)
     metadata_table = pd.DataFrame([row.__dict__ for row in metadata_rows])
+    if group is not None:
+        metadata_table["group"] = group
 
     outputs = {
         "behavior": write_output_table(behavior_table, output_dir / "behavior_long", output_format),
@@ -270,6 +279,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=float, default=60.0, help="Frame rate used to convert frame index to time.")
     parser.add_argument("--behavior-prefix", default="Pred_", help="Prefix used by behavior columns in legacy prediction CSVs.")
     parser.add_argument(
+        "--frame-col",
+        default="frame",
+        help="Optional legacy frame-index column to preserve. Falls back to row index if absent.",
+    )
+    parser.add_argument(
         "--chunk-pattern",
         default="chunk_data_log_{ts}.csv",
         help="Legacy chunk log filename pattern, where {ts} is extracted from prediction filenames.",
@@ -286,6 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="How to derive entity ids for the normalized output tables.",
     )
     parser.add_argument("--event-type", default="stimulus", help="Event type label to assign in the output event table.")
+    parser.add_argument("--group", help="Optional cohort/group label to add to the output metadata table.")
     parser.add_argument(
         "--output-format",
         default="csv",
@@ -304,10 +319,12 @@ def main() -> None:
         output_dir=args.output_dir,
         frame_rate=args.fps,
         behavior_prefix=args.behavior_prefix,
+        frame_col=args.frame_col,
         chunk_pattern=args.chunk_pattern,
         timestamp_regex=args.timestamp_regex,
         entity_id_mode=args.entity_id_mode,
         event_type=args.event_type,
+        group=args.group,
         output_format=args.output_format,
     )
     for path in outputs["behavior"]:

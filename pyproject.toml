@@ -23,6 +23,8 @@ dependencies = [
 [project.scripts]
 kinelearn-stimviz = "kinelearn_stimviz.cli:main"
 kinelearn-stimviz-convert-legacy = "kinelearn_stimviz.legacy_convert:main"
+kinelearn-stimviz-build-events = "kinelearn_stimviz.build_events:main"
+kinelearn-stimviz-merge = "kinelearn_stimviz.merge_converted:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

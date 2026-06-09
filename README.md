@@ -45,6 +45,8 @@ then `kinelearn-stimviz` can adapt that into its normalized behavior schema with
 
 KineLearn itself already covers quick qualitative inspection through timeline plotting. `kinelearn-stimviz` is meant for the next step: specialized, event-aligned summaries.
 
+When stimulus times are stored separately, for example in LED log files, `kinelearn-stimviz` also includes a helper for building normalized `stimulus_events` tables before plotting.
+
 ## Core Data Contract
 
 The package works from a small normalized schema.
@@ -149,6 +151,40 @@ pip install -e .
 
 ### Plotting from normalized tables
 
+If your stimulus times still live in LED log files, build a normalized event table first. The generic event-builder helper accepts either:
+
+- a manifest table with explicit `entity_id`, `led_path`, and either `chunk_path` or `video_start_time`
+- or the older JSON pair format used by the legacy workflow
+
+Generic manifest example:
+
+```bash
+kinelearn-stimviz-build-events \
+  event_manifest.csv \
+  --output-dir converted/events \
+  --source-format table \
+  --output-format parquet
+```
+
+Legacy-pairs example with optional remapping from older source ids to KineLearn stems:
+
+```bash
+kinelearn-stimviz-build-events \
+  video_lists/retinal_fed_29Aug.json \
+  --output-dir converted/retinal_fed_events \
+  --source-format legacy-pairs-json \
+  --entity-map entity_map.csv \
+  --event-type led \
+  --output-format parquet
+```
+
+This writes:
+
+- `stimulus_events.csv` / `.parquet`
+- `event_sources.csv` / `.parquet`
+
+The `event_sources` table is a provenance record describing which LED logs and timing anchors were used to build the final event table.
+
 Run the example:
 
 ```bash
@@ -238,10 +274,11 @@ Use it when you want to bring older datasets into the new table-based workflow:
 
 ```bash
 kinelearn-stimviz-convert-legacy \
-  old/retinal_fed_29Aug.json \
+  video_lists/retinal_fed_29Aug.json \
   --output-dir converted/retinal_fed_29Aug \
   --fps 60 \
-  --event-type laser \
+  --event-type led \
+  --group retinal_fed \
   --output-format parquet
 ```
 
@@ -254,6 +291,29 @@ This writes normalized tables such as:
 You can also use `--output-format csv` or `--output-format both`. Parquet output requires a parquet engine such as `pyarrow`.
 
 The converter is intentionally isolated from the main plotting path. It uses the older prediction CSV plus LED log pairing and the legacy `chunk_data_log_<timestamp>.csv` lookup only to migrate older experiments into the same schema that newer KineLearn-derived workflows can use directly.
+
+Use the default Pred_ columns for reproducing original proportion PSTHs.
+Use --behavior-prefix Prob_ for probability-valued PSTHs, which will not match the original plot scale/profile exactly.
+
+For legacy cohort comparisons, run the converter once per JSON manifest with a different `--group` label, merge the converted directories, then plot with `--group-col group`:
+
+```bash
+kinelearn-stimviz-convert-legacy \
+  video_lists/no_retinal_29Aug.json \
+  --output-dir converted/no_retinal_29Aug \
+  --fps 60 \
+  --event-type led \
+  --group no_retinal \
+  --output-format parquet
+
+kinelearn-stimviz-merge \
+  --input converted/retinal_fed_29Aug \
+  --input converted/no_retinal_29Aug \
+  --output-dir converted/legacy_combined_29Aug \
+  --output-format parquet
+```
+
+By default, the converter reads binary behavior columns with the `Pred_` prefix; pass `--behavior-prefix Prob_` if you want probability traces instead.
 
 ## Design Notes
 

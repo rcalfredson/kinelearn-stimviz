@@ -315,6 +315,40 @@ kinelearn-stimviz-merge \
 
 By default, the converter reads binary behavior columns with the `Pred_` prefix; pass `--behavior-prefix Prob_` if you want probability traces instead.
 
+For a standalone, paper-style panel, you can override display labels without changing the internal behavior or group names:
+
+```bash
+kinelearn-stimviz \
+  --events converted/legacy_combined_29Aug/stimulus_events.parquet \
+  --behavior converted/legacy_combined_29Aug/behavior_long.parquet \
+  --metadata converted/legacy_combined_29Aug/metadata.parquet \
+  --output plots/hind_leg_groom_last10.png \
+  --event-subset last \
+  --event-count 10 \
+  --alignment-mode frame \
+  --fps 60 \
+  --pre 1 \
+  --post 3 \
+  --group-col group \
+  --behaviors back_leg_together \
+  --behavior-label "back_leg_together=Hind legs grooming" \
+  --group-label "retinal_fed=Retinal-fed" \
+  --group-label "no_retinal=Non-retinal-fed" \
+  --group-order retinal_fed no_retinal \
+  --group-color "retinal_fed=tab:orange" \
+  --group-color "no_retinal=tab:blue" \
+  --hide-subplot-titles \
+  --hide-legend-title \
+  --show-group-ns \
+  --fig-width 5.2 \
+  --fig-height 3.8 \
+  --ylabel "Proportion" \
+  --xlabel "Time (s)" \
+  --title "Hind legs grooming" \
+  --annotation "0.2 Hz stimulation" \
+  --annotation-box-alpha 0.65
+```
+
 ## Design Notes
 
 This package preserves the useful analysis structure from older one-off plotting scripts while generalizing away lab-specific assumptions:

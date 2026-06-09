@@ -9,6 +9,23 @@ from .io import load_behavior_table, load_metadata, load_stimulus_events
 from .plotting import plot_psth
 
 
+def parse_label_overrides(values: list[str] | None, *, option_name: str) -> dict[str, str]:
+    """Parse repeated key=value display label overrides."""
+    if not values:
+        return {}
+    labels: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"{option_name} entries must use internal_name=Display label syntax.")
+        key, label = value.split("=", 1)
+        key = key.strip()
+        label = label.strip()
+        if not key:
+            raise ValueError(f"{option_name} entries must include a non-empty internal name.")
+        labels[key] = label
+    return labels
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kinelearn-stimviz",
@@ -59,8 +76,40 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--behaviors", nargs="*", help="Subset of behaviors to include.")
     parser.add_argument("--group-col", default="group", help="Metadata column used for cohort comparisons.")
+    parser.add_argument(
+        "--behavior-label",
+        action="append",
+        help="Display label override for a behavior, as internal_name=Display label. Repeat as needed.",
+    )
+    parser.add_argument(
+        "--group-label",
+        action="append",
+        help="Display label override for a group value, as internal_name=Display label. Repeat as needed.",
+    )
+    parser.add_argument(
+        "--group-color",
+        action="append",
+        help="Color override for a group value, as internal_name=color. Repeat as needed.",
+    )
+    parser.add_argument(
+        "--group-order",
+        nargs="*",
+        help="Internal group values in the order they should appear in plots and legends.",
+    )
+    parser.add_argument("--legend-title", help="Legend title to display instead of the grouping column name.")
+    parser.add_argument("--hide-legend-title", action="store_true", help="Hide the legend title.")
+    parser.add_argument("--hide-subplot-titles", action="store_true", help="Hide per-behavior subplot titles.")
+    parser.add_argument("--show-group-ns", action="store_true", help="Append subject counts to group legend labels.")
+    parser.add_argument("--fig-width", type=float, help="Output figure width in inches.")
+    parser.add_argument("--fig-height", type=float, help="Output figure height in inches.")
     parser.add_argument("--title", help="Optional plot title.")
     parser.add_argument("--ylabel", default="Proportion / score", help="Y-axis label.")
+    parser.add_argument("--xlabel", default="Time (s)", help="X-axis label.")
+    parser.add_argument("--annotation", help="Optional text annotation to place inside each plot panel.")
+    parser.add_argument("--annotation-x", type=float, default=0.98, help="Annotation x-position in axes coordinates.")
+    parser.add_argument("--annotation-y", type=float, default=0.95, help="Annotation y-position in axes coordinates.")
+    parser.add_argument("--annotation-box-alpha", type=float, default=0.65, help="Transparency for the annotation white background.")
+    parser.add_argument("--annotation-box-pad", type=float, default=0.25, help="Padding for the annotation background box.")
     return parser
 
 
@@ -119,13 +168,37 @@ def main() -> None:
         group_summary = summarize_by_group(subject_summary, group_cols=[])
         group_col = None
 
+    behavior_labels = parse_label_overrides(args.behavior_label, option_name="--behavior-label")
+    group_labels = parse_label_overrides(args.group_label, option_name="--group-label")
+    group_colors = parse_label_overrides(args.group_color, option_name="--group-color")
+    figsize = None
+    if args.fig_width is not None or args.fig_height is not None:
+        if args.fig_width is None or args.fig_height is None:
+            raise ValueError("Provide both --fig-width and --fig-height, or neither.")
+        figsize = (args.fig_width, args.fig_height)
+
     output = plot_psth(
         group_summary,
         output_path=args.output,
         behavior_order=args.behaviors,
         group_col=group_col,
+        group_order=args.group_order,
+        behavior_labels=behavior_labels,
+        group_labels=group_labels,
+        group_colors=group_colors,
+        show_subplot_titles=not args.hide_subplot_titles,
+        legend_title=args.legend_title,
+        show_legend_title=not args.hide_legend_title,
+        show_group_ns=args.show_group_ns,
         title=args.title,
         ylabel=args.ylabel,
+        xlabel=args.xlabel,
+        figsize=figsize,
+        annotation=args.annotation,
+        annotation_x=args.annotation_x,
+        annotation_y=args.annotation_y,
+        annotation_box_alpha=args.annotation_box_alpha,
+        annotation_box_pad=args.annotation_box_pad,
     )
     print(f"Saved plot to {output}")
 

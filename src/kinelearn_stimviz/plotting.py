@@ -21,6 +21,7 @@ def plot_psth(
     behavior_labels: dict[str, str] | None = None,
     group_labels: dict[str, str] | None = None,
     group_colors: dict[str, str] | None = None,
+    show_gridlines: bool = False,
     show_subplot_titles: bool = True,
     legend_title: str | None = None,
     show_legend_title: bool = True,
@@ -41,7 +42,7 @@ def plot_psth(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if sns is not None:
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="white")
         base_palette = sns.color_palette("deep")
     else:
         plt.style.use("ggplot")
@@ -81,7 +82,7 @@ def plot_psth(
     for idx, behavior in enumerate(behavior_order):
         ax = axes[idx, 0]
         behavior_df = group_summary[group_summary["behavior"] == behavior]
-        ax.axvspan(event_band[0], event_band[1], color="#d9d9d9", alpha=0.35, lw=0)
+        ax.axvspan(event_band[0], event_band[1], color="#838383", alpha=1.0, lw=0)
 
         for group_idx, group_value in enumerate(group_values):
             color = base_palette[group_idx % len(base_palette)]
@@ -110,7 +111,8 @@ def plot_psth(
         if show_subplot_titles:
             ax.set_title(behavior_labels.get(str(behavior), str(behavior)))
         ax.set_ylabel(ylabel)
-        ax.axvline(0.0, color="black", lw=1, alpha=0.7)
+        ax.grid(show_gridlines)
+        ax.axvline(0.0, color="black", lw=1, alpha=0.2)
         if annotation:
             ax.text(
                 annotation_x,

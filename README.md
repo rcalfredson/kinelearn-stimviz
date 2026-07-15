@@ -337,6 +337,7 @@ kinelearn-stimviz \
   --group-order retinal_fed no_retinal \
   --group-color "retinal_fed=tab:orange" \
   --group-color "no_retinal=tab:blue" \
+  --show-gridlines \
   --hide-subplot-titles \
   --hide-legend-title \
   --show-group-ns \

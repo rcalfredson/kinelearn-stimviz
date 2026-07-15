@@ -99,6 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--legend-title", help="Legend title to display instead of the grouping column name.")
     parser.add_argument("--hide-legend-title", action="store_true", help="Hide the legend title.")
     parser.add_argument("--hide-subplot-titles", action="store_true", help="Hide per-behavior subplot titles.")
+    parser.add_argument("--show-gridlines", action="store_true", help="Show gridlines in each plot panel.")
     parser.add_argument("--show-group-ns", action="store_true", help="Append subject counts to group legend labels.")
     parser.add_argument("--fig-width", type=float, help="Output figure width in inches.")
     parser.add_argument("--fig-height", type=float, help="Output figure height in inches.")
@@ -186,6 +187,7 @@ def main() -> None:
         behavior_labels=behavior_labels,
         group_labels=group_labels,
         group_colors=group_colors,
+        show_gridlines=args.show_gridlines,
         show_subplot_titles=not args.hide_subplot_titles,
         legend_title=args.legend_title,
         show_legend_title=not args.hide_legend_title,

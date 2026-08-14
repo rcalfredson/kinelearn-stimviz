@@ -46,7 +46,7 @@ def summarize_by_group(
     *,
     group_cols: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Average across subjects per group, behavior, and time bin with 95% CI."""
+    """Average across subjects with pointwise 95% Student's t-confidence intervals."""
     if group_cols is None:
         group_cols = []
     summary_cols = group_cols + ["behavior", "relative_time"]

@@ -126,7 +126,7 @@ The current package is intentionally modest in scope:
 - binary or proportion-like traces
 - per-event, per-subject, and per-group aggregation
 - configurable all / first N / last N event selection
-- PSTH-style plots with 95% confidence intervals
+- PSTH-style plots with pointwise 95% Student's t-confidence intervals
 
 The implementation is organized under:
 

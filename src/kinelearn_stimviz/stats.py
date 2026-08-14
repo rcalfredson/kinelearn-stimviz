@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.stats import t
 
 
 def ci95_bounds(
     mean: pd.Series | np.ndarray,
     sem: pd.Series | np.ndarray,
+    n: pd.Series | np.ndarray,
 ) -> tuple[pd.Series | np.ndarray, pd.Series | np.ndarray]:
-    """Return normal-approximation 95% confidence bounds."""
-    half_width = 1.96 * sem
+    """Return two-sided 95% Student's t-confidence bounds."""
+    critical_value = t.ppf(0.975, np.asarray(n) - 1)
+    half_width = critical_value * sem
     return mean - half_width, mean + half_width
 
 
@@ -29,7 +32,7 @@ def add_summary_statistics(
         .rename(columns={"count": "n"})
     )
     grouped["sem"] = grouped["std"] / np.sqrt(grouped["n"].clip(lower=1))
-    lo, hi = ci95_bounds(grouped["mean"], grouped["sem"].fillna(0))
+    lo, hi = ci95_bounds(grouped["mean"], grouped["sem"], grouped["n"])
     grouped["ci_low"] = lo
     grouped["ci_high"] = hi
     return grouped

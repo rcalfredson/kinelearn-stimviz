@@ -103,6 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-group-ns", action="store_true", help="Append subject counts to group legend labels.")
     parser.add_argument("--fig-width", type=float, help="Output figure width in inches.")
     parser.add_argument("--fig-height", type=float, help="Output figure height in inches.")
+    parser.add_argument(
+        "--font-size",
+        type=float,
+        help=(
+            "Middle font size in points; the canvas expands as needed around "
+            "a fixed-size plot area."
+        ),
+    )
     parser.add_argument("--title", help="Optional plot title.")
     parser.add_argument("--ylabel", default="Proportion / score", help="Y-axis label.")
     parser.add_argument("--xlabel", default="Time (s)", help="X-axis label.")
@@ -195,6 +203,7 @@ def main() -> None:
         title=args.title,
         ylabel=args.ylabel,
         xlabel=args.xlabel,
+        font_size=args.font_size,
         figsize=figsize,
         annotation=args.annotation,
         annotation_x=args.annotation_x,

@@ -1,14 +1,97 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from matplotlib.text import Text
+from matplotlib.ticker import MaxNLocator
 
 try:
     import seaborn as sns
 except ModuleNotFoundError:  # pragma: no cover - optional dependency at runtime
     sns = None
+
+
+_REFERENCE_FONT_SIZE = 10.0
+_EXTRA_Y_HEADROOM_PER_SCALE = 0.2
+
+
+def _tight_layout(fig, *, has_title: bool) -> None:
+    if has_title:
+        fig.tight_layout(rect=(0, 0, 1, 0.98))
+    else:
+        fig.tight_layout()
+
+
+def _resize_figure_for_font(
+    fig,
+    axes,
+    font_size: float | None,
+    *,
+    has_title: bool,
+) -> None:
+    """Grow only the non-plot area needed by text at the requested size."""
+    if font_size is None:
+        _tight_layout(fig, has_title=has_title)
+        return
+
+    scale = font_size / _REFERENCE_FONT_SIZE
+    flat_axes = list(axes.flat)
+    text_objects = fig.findobj(match=Text)
+    requested_sizes = [text.get_fontsize() for text in text_objects]
+
+    # Measure the data rectangles with the same content at the 10-point
+    # reference size, then restore the requested sizes and add only enough
+    # canvas to recover those rectangle dimensions.
+    for text, requested_size in zip(text_objects, requested_sizes, strict=True):
+        text.set_fontsize(requested_size / scale)
+    _tight_layout(fig, has_title=has_title)
+    width, height = fig.get_size_inches()
+    reference_axes_width = max(ax.get_position().width for ax in flat_axes) * width
+    reference_axes_height = sum(ax.get_position().height for ax in flat_axes) * height
+
+    for text, requested_size in zip(text_objects, requested_sizes, strict=True):
+        text.set_fontsize(requested_size)
+    _tight_layout(fig, has_title=has_title)
+    requested_axes_width = max(ax.get_position().width for ax in flat_axes) * width
+    requested_axes_height = sum(ax.get_position().height for ax in flat_axes) * height
+
+    resized_width = width + reference_axes_width - requested_axes_width
+    resized_height = height + reference_axes_height - requested_axes_height
+    fig.set_size_inches(resized_width, resized_height, forward=True)
+    _tight_layout(fig, has_title=has_title)
+
+
+def _add_font_scaled_y_headroom(ax, font_size: float | None) -> None:
+    """Add empty data space above an axes for larger-font plot elements."""
+    if font_size is None or font_size <= _REFERENCE_FONT_SIZE:
+        return
+
+    lower, upper = ax.get_ylim()
+    scale = font_size / _REFERENCE_FONT_SIZE
+    extra = (upper - lower) * _EXTRA_Y_HEADROOM_PER_SCALE * (scale - 1.0)
+    ax.set_ylim(lower, upper + extra)
+
+
+def _anchor_y_ticks_at_zero(ax) -> None:
+    """Start nonnegative data at zero and always label zero when in-range."""
+    data_lower = ax.dataLim.ymin
+    data_upper = ax.dataLim.ymax
+    data_span = data_upper - data_lower
+    zero_tolerance = max(abs(data_span), 1.0) * 1e-12
+    if np.isfinite(data_lower) and data_lower >= -zero_tolerance:
+        ax.set_ylim(bottom=0)
+
+    lower, upper = ax.get_ylim()
+    if not (lower <= 0 <= upper):
+        return
+
+    ax.yaxis.set_major_locator(
+        MaxNLocator(nbins="auto", steps=[1, 2, 2.5, 5, 10], min_n_ticks=2)
+    )
 
 
 def plot_psth(
@@ -29,6 +112,7 @@ def plot_psth(
     title: str | None = None,
     ylabel: str = "Value",
     xlabel: str = "Time (s)",
+    font_size: float | None = None,
     figsize: tuple[float, float] | None = None,
     event_band: tuple[float, float] = (0.0, 0.05),
     annotation: str | None = None,
@@ -37,7 +121,16 @@ def plot_psth(
     annotation_box_alpha: float = 0.65,
     annotation_box_pad: float = 0.25,
 ) -> Path:
-    """Plot one PSTH-style panel per behavior with confidence intervals."""
+    """Plot one PSTH-style panel per behavior with confidence intervals.
+
+    ``font_size`` anchors text that uses the middle font role. Titles are
+    scaled to Matplotlib's ``large`` ratio and secondary text to its ``small``
+    ratio. The canvas grows only by the additional room needed for text beyond
+    a 10-point reference, leaving the data rectangles approximately unchanged.
+    """
+    if font_size is not None and (not math.isfinite(font_size) or font_size <= 0):
+        raise ValueError("font_size must be a positive, finite number.")
+
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -47,6 +140,10 @@ def plot_psth(
     else:
         plt.style.use("ggplot")
         base_palette = list(plt.rcParams["axes.prop_cycle"].by_key()["color"])
+
+    medium_font = {"fontsize": font_size} if font_size is not None else {}
+    small_font_size = font_size * (5 / 6) if font_size is not None else None
+    large_font = {"fontsize": font_size * 1.2} if font_size is not None else {}
 
     if behavior_order is None:
         behavior_order = list(group_summary["behavior"].drop_duplicates())
@@ -109,8 +206,10 @@ def plot_psth(
             )
 
         if show_subplot_titles:
-            ax.set_title(behavior_labels.get(str(behavior), str(behavior)))
-        ax.set_ylabel(ylabel)
+            ax.set_title(behavior_labels.get(str(behavior), str(behavior)), **large_font)
+        ax.set_ylabel(ylabel, **medium_font)
+        if font_size is not None:
+            ax.tick_params(axis="both", labelsize=small_font_size)
         ax.grid(show_gridlines)
         ax.axvline(0.0, color="black", lw=1, alpha=0.2)
         if annotation:
@@ -121,6 +220,7 @@ def plot_psth(
                 transform=ax.transAxes,
                 ha="right",
                 va="top",
+                fontsize=small_font_size if font_size is not None else None,
                 bbox={
                     "boxstyle": f"round,pad={annotation_box_pad}",
                     "facecolor": "white",
@@ -129,14 +229,24 @@ def plot_psth(
                 },
             )
         if idx == 0 and len(group_values) > 1:
-            ax.legend(title=legend_title if show_legend_title else None)
+            legend_kwargs = {}
+            if font_size is not None:
+                legend_kwargs = {
+                    "fontsize": small_font_size,
+                    "title_fontsize": font_size,
+                }
+            ax.legend(
+                title=legend_title if show_legend_title else None,
+                loc="upper left",
+                **legend_kwargs,
+            )
+        _add_font_scaled_y_headroom(ax, font_size)
+        _anchor_y_ticks_at_zero(ax)
 
-    axes[-1, 0].set_xlabel(xlabel)
+    axes[-1, 0].set_xlabel(xlabel, **medium_font)
     if title:
-        fig.suptitle(title)
-        fig.tight_layout(rect=(0, 0, 1, 0.98))
-    else:
-        fig.tight_layout()
+        fig.suptitle(title, **large_font)
+    _resize_figure_for_font(fig, axes, font_size, has_title=bool(title))
 
     fig.savefig(output_path, dpi=150)
     plt.close(fig)

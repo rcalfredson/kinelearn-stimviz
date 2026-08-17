@@ -343,12 +343,30 @@ kinelearn-stimviz \
   --show-group-ns \
   --fig-width 5.2 \
   --fig-height 3.8 \
+  --font-size 11 \
   --ylabel "Proportion" \
   --xlabel "Time (s)" \
   --title "Hind legs grooming" \
   --annotation "0.2 Hz stimulation" \
   --annotation-box-alpha 0.65
 ```
+
+`--font-size` sets the middle-sized plot text (axis labels and legend titles)
+in points. Subplot and overall titles are larger at 1.2 times that size; tick
+labels, legend entries, and in-plot annotations are smaller at 5/6 of that
+size. If the option is omitted, Matplotlib's current theme defaults are used
+unchanged.
+When a font size is supplied, the default or explicitly requested dimensions
+describe the 10-point reference layout. The canvas grows only by the extra
+margin space required by larger text; the data plotting area does not scale
+with the font. Larger sizes also extend the upper y-limit to create empty space
+inside the plot for the legend and annotation area without changing the lower
+y-limit.
+
+For nonnegative data, the y-axis explicitly starts at zero and zero is retained
+as a labeled major tick. A tiny numerical tolerance prevents floating-point
+noise around zero from defeating this behavior. Data with genuinely negative
+values keep their negative lower range while still labeling zero.
 
 ## Design Notes
 

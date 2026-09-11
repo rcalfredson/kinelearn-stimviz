@@ -112,6 +112,8 @@ def plot_psth(
     title: str | None = None,
     ylabel: str = "Value",
     xlabel: str = "Time (s)",
+    y_min: float | None = None,
+    y_max: float | None = None,
     font_size: float | None = None,
     figsize: tuple[float, float] | None = None,
     event_band: tuple[float, float] = (0.0, 0.05),
@@ -130,6 +132,12 @@ def plot_psth(
     """
     if font_size is not None and (not math.isfinite(font_size) or font_size <= 0):
         raise ValueError("font_size must be a positive, finite number.")
+    if y_min is not None and not math.isfinite(y_min):
+        raise ValueError("y_min must be finite.")
+    if y_max is not None and not math.isfinite(y_max):
+        raise ValueError("y_max must be finite.")
+    if y_min is not None and y_max is not None and y_min >= y_max:
+        raise ValueError("y_min must be less than y_max.")
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -242,6 +250,8 @@ def plot_psth(
             )
         _add_font_scaled_y_headroom(ax, font_size)
         _anchor_y_ticks_at_zero(ax)
+        if y_min is not None or y_max is not None:
+            ax.set_ylim(bottom=y_min, top=y_max)
 
     axes[-1, 0].set_xlabel(xlabel, **medium_font)
     if title:

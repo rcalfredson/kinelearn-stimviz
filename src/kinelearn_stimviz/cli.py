@@ -114,6 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title", help="Optional plot title.")
     parser.add_argument("--ylabel", default="Proportion / score", help="Y-axis label.")
     parser.add_argument("--xlabel", default="Time (s)", help="X-axis label.")
+    parser.add_argument("--y-min", type=float, help="Fixed lower Y-axis limit.")
+    parser.add_argument("--y-max", type=float, help="Fixed upper Y-axis limit.")
     parser.add_argument("--annotation", help="Optional text annotation to place inside each plot panel.")
     parser.add_argument("--annotation-x", type=float, default=0.98, help="Annotation x-position in axes coordinates.")
     parser.add_argument("--annotation-y", type=float, default=0.95, help="Annotation y-position in axes coordinates.")
@@ -203,6 +205,8 @@ def main() -> None:
         title=args.title,
         ylabel=args.ylabel,
         xlabel=args.xlabel,
+        y_min=args.y_min,
+        y_max=args.y_max,
         font_size=args.font_size,
         figsize=figsize,
         annotation=args.annotation,

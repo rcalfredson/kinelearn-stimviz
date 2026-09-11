@@ -20,12 +20,20 @@ def _summary() -> pd.DataFrame:
     )
 
 
-def test_cli_accepts_font_size() -> None:
+def test_cli_accepts_plot_size_options() -> None:
     args = build_parser().parse_args(
-        ["--events", "events.csv", "--behavior", "behavior.csv", "--font-size", "11.5"]
+        [
+            "--events", "events.csv",
+            "--behavior", "behavior.csv",
+            "--font-size", "11.5",
+            "--y-min", "0",
+            "--y-max", "0.35",
+        ]
     )
 
     assert args.font_size == 11.5
+    assert args.y_min == 0
+    assert args.y_max == 0.35
 
 
 def test_font_size_anchors_medium_text_and_scales_titles(tmp_path, monkeypatch) -> None:
@@ -114,6 +122,40 @@ def test_negative_y_data_retains_its_lower_range(tmp_path, monkeypatch) -> None:
     ax = closed_figures[0].axes[0]
     assert ax.get_ylim()[0] < 0
     assert any(tick == pytest.approx(0) for tick in ax.get_yticks())
+
+
+def test_explicit_y_limits_override_automatic_limits(tmp_path, monkeypatch) -> None:
+    closed_figures = []
+    monkeypatch.setattr("kinelearn_stimviz.plotting.plt.close", closed_figures.append)
+
+    plot_psth(
+        _summary(),
+        output_path=tmp_path / "plot.png",
+        y_min=0,
+        y_max=0.35,
+        font_size=20,
+    )
+
+    assert closed_figures[0].axes[0].get_ylim() == pytest.approx((0, 0.35))
+
+
+@pytest.mark.parametrize(
+    ("y_min", "y_max", "message"),
+    [
+        (float("nan"), None, "y_min must be finite"),
+        (None, float("inf"), "y_max must be finite"),
+        (0.35, 0.35, "y_min must be less than y_max"),
+        (1, 0, "y_min must be less than y_max"),
+    ],
+)
+def test_y_limits_are_validated(tmp_path, y_min, y_max, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        plot_psth(
+            _summary(),
+            output_path=tmp_path / "plot.png",
+            y_min=y_min,
+            y_max=y_max,
+        )
 
 
 @pytest.mark.parametrize("font_size", [0, -1, float("inf"), float("nan")])

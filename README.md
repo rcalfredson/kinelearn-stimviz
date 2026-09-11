@@ -345,6 +345,8 @@ kinelearn-stimviz \
   --fig-height 3.8 \
   --font-size 11 \
   --ylabel "Proportion" \
+  --y-min 0 \
+  --y-max 0.35 \
   --xlabel "Time (s)" \
   --title "Hind legs grooming" \
   --annotation "0.2 Hz stimulation" \
@@ -367,6 +369,8 @@ For nonnegative data, the y-axis explicitly starts at zero and zero is retained
 as a labeled major tick. A tiny numerical tolerance prevents floating-point
 noise around zero from defeating this behavior. Data with genuinely negative
 values keep their negative lower range while still labeling zero.
+Use `--y-min` and/or `--y-max` to override either automatic limit. For example,
+`--y-min 0 --y-max 0.35` fixes every behavior panel to that shared range.
 
 ## Design Notes
 

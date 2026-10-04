@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
-from kinelearn_stimviz.cli import build_parser
+from kinelearn_stimviz.cli import build_parser, main
 from kinelearn_stimviz.plotting import plot_psth
 
 
@@ -34,6 +36,45 @@ def test_cli_accepts_plot_size_options() -> None:
     assert args.font_size == 11.5
     assert args.y_min == 0
     assert args.y_max == 0.35
+
+
+@pytest.mark.parametrize("duration", [None, 0.5])
+def test_cli_stimulation_duration_sets_shaded_interval(tmp_path, monkeypatch, duration) -> None:
+    data_dir = Path(__file__).resolve().parents[1] / "examples" / "data"
+    output_path = tmp_path / "plot.png"
+    argv = [
+        "kinelearn-stimviz",
+        "--events", str(data_dir / "stimulus_events.csv"),
+        "--behavior", str(data_dir / "behavior_long.csv"),
+        "--output", str(output_path),
+    ]
+    if duration is not None:
+        argv.extend(["--stim-duration", str(duration)])
+    monkeypatch.setattr("sys.argv", argv)
+    closed_figures = []
+    monkeypatch.setattr("kinelearn_stimviz.plotting.plt.close", closed_figures.append)
+
+    main()
+
+    assert output_path.is_file()
+    for ax in closed_figures[0].axes:
+        band_bounds = ax.patches[0].get_window_extent().transformed(ax.transData.inverted())
+        assert band_bounds.xmin == pytest.approx(0.0)
+        assert band_bounds.xmax == pytest.approx(0.25 if duration is None else duration)
+
+
+@pytest.mark.parametrize("duration", ["0", "-1", "inf", "nan"])
+def test_cli_rejects_invalid_stimulation_duration(monkeypatch, capsys, duration) -> None:
+    monkeypatch.setattr("sys.argv", [
+        "kinelearn-stimviz", "--events", "events.csv", "--behavior", "behavior.csv",
+        "--stim-duration", duration,
+    ])
+
+    with pytest.raises(SystemExit) as error:
+        main()
+
+    assert error.value.code == 2
+    assert "--stim-duration must be a positive, finite number" in capsys.readouterr().err
 
 
 def test_font_size_anchors_medium_text_and_scales_titles(tmp_path, monkeypatch) -> None:

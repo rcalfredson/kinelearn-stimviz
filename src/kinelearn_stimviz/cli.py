@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 from .aggregate import summarize_by_event, summarize_by_group, summarize_by_subject
@@ -67,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--pre", type=float, default=1.0, help="Seconds before each event.")
     parser.add_argument("--post", type=float, default=2.0, help="Seconds after each event.")
+    parser.add_argument(
+        "--stim-duration",
+        type=float,
+        default=0.25,
+        help="Duration of the shaded stimulation period from onset, in seconds (default: 0.25).",
+    )
     parser.add_argument("--bin-size", type=float, help="Aligned window bin size in seconds.")
     parser.add_argument(
         "--alignment-mode",
@@ -127,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if not math.isfinite(args.stim_duration) or args.stim_duration <= 0:
+        parser.error("--stim-duration must be a positive, finite number of seconds.")
 
     events = load_stimulus_events(
         args.events,
@@ -209,6 +218,7 @@ def main() -> None:
         y_max=args.y_max,
         font_size=args.font_size,
         figsize=figsize,
+        event_band=(0.0, args.stim_duration),
         annotation=args.annotation,
         annotation_x=args.annotation_x,
         annotation_y=args.annotation_y,

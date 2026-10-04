@@ -372,6 +372,11 @@ values keep their negative lower range while still labeling zero.
 Use `--y-min` and/or `--y-max` to override either automatic limit. For example,
 `--y-min 0 --y-max 0.35` fixes every behavior panel to that shared range.
 
+The shaded stimulation period starts at time zero and lasts 0.25 seconds by
+default. Use `--stim-duration 0.5` to shade the first 500 ms after onset.
+The duration must be positive and finite; this option controls the plot shading
+and does not change event alignment or the analysis window.
+
 ## Design Notes
 
 This package preserves the useful analysis structure from older one-off plotting scripts while generalizing away lab-specific assumptions:

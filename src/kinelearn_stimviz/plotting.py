@@ -116,7 +116,7 @@ def plot_psth(
     y_max: float | None = None,
     font_size: float | None = None,
     figsize: tuple[float, float] | None = None,
-    event_band: tuple[float, float] = (0.0, 0.05),
+    event_band: tuple[float, float] = (0.0, 0.25),
     annotation: str | None = None,
     annotation_x: float = 0.98,
     annotation_y: float = 0.95,
@@ -124,6 +124,9 @@ def plot_psth(
     annotation_box_pad: float = 0.25,
 ) -> Path:
     """Plot one PSTH-style panel per behavior with confidence intervals.
+
+    ``event_band`` sets the shaded interval in seconds relative to onset,
+    defaulting to 0–0.25 seconds.
 
     ``font_size`` anchors text that uses the middle font role. Titles are
     scaled to Matplotlib's ``large`` ratio and secondary text to its ``small``
@@ -187,7 +190,7 @@ def plot_psth(
     for idx, behavior in enumerate(behavior_order):
         ax = axes[idx, 0]
         behavior_df = group_summary[group_summary["behavior"] == behavior]
-        ax.axvspan(event_band[0], event_band[1], color="#838383", alpha=1.0, lw=0)
+        ax.axvspan(event_band[0], event_band[1], color="#838383", alpha=0.2, lw=0)
 
         for group_idx, group_value in enumerate(group_values):
             color = base_palette[group_idx % len(base_palette)]
